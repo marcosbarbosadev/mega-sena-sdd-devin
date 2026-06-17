@@ -2,6 +2,8 @@ package com.megasena.sync.config;
 
 import com.megasena.sync.identidade.EmailNaoVerificadoException;
 import com.megasena.sync.identidade.provedor.ProvedorIndisponivelException;
+import com.megasena.sync.moderacao.ContaNaoEncontradaException;
+import com.megasena.sync.moderacao.TransicaoInvalidaException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -39,6 +41,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleProvedorIndisponivel(ProvedorIndisponivelException ex) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(errorBody(503, "PROVEDOR_INDISPONIVEL", "Serviço de identidade temporariamente indisponível."));
+    }
+
+    @ExceptionHandler(ContaNaoEncontradaException.class)
+    public ResponseEntity<Map<String, Object>> handleContaNaoEncontrada(ContaNaoEncontradaException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(errorBody(404, "NAO_ENCONTRADO", ex.getMessage()));
+    }
+
+    @ExceptionHandler(TransicaoInvalidaException.class)
+    public ResponseEntity<Map<String, Object>> handleTransicaoInvalida(TransicaoInvalidaException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(errorBody(409, "TRANSICAO_INVALIDA", ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
