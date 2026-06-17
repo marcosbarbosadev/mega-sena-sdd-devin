@@ -35,9 +35,10 @@ class AdminAuthIT extends AbstractWireMockIntegrationTest {
 
     @Test
     void runEndpointRequiresAuth() {
+        HttpHeaders headers = new HttpHeaders();
         var response = restTemplate.exchange(
                 "http://localhost:" + port + "/api/admin/sync/run",
-                HttpMethod.POST, new HttpEntity<>(null), String.class);
+                HttpMethod.POST, new HttpEntity<>("", headers), String.class);
         assertEquals(401, response.getStatusCode().value());
     }
 
