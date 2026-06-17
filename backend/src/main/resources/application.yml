@@ -17,6 +17,9 @@ spring:
     baseline-on-migrate: true
 
 megasena:
+  identidade:
+    project-id: ${IDENTIDADE_PROJECT_ID:}
+    admins-bootstrap: ${IDENTIDADE_ADMINS_BOOTSTRAP:}
   source:
     base-url: ${MEGASENA_SOURCE_URL:https://servicebus2.caixa.gov.br/portaldeloterias/api/megasena}
     connect-timeout: ${MEGASENA_CONNECT_TIMEOUT:5000}
