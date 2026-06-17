@@ -2,9 +2,12 @@ package com.megasena.sync.admin;
 
 import com.megasena.sync.concurso.Concurso;
 import com.megasena.sync.concurso.ConcursoRepository;
+import com.megasena.sync.identidade.MetodoLogin;
 import com.megasena.sync.sincronizacao.OrigemSync;
 import com.megasena.sync.sincronizacao.SincronizacaoService;
 import com.megasena.sync.support.AbstractWireMockIntegrationTest;
+import com.megasena.sync.support.VerificadorDeIdentidadeFake;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -32,9 +35,22 @@ class AdminSyncStatusIT extends AbstractWireMockIntegrationTest {
     @Autowired
     private TestRestTemplate restTemplate;
 
+    @Autowired
+    private VerificadorDeIdentidadeFake verificadorFake;
+
+    @BeforeEach
+    void setUpAuth() {
+        verificadorFake.limpar();
+        verificadorFake.registrarToken("admin-token", "uid-admin-sync", "admin@bootstrap.com", true, MetodoLogin.SENHA);
+        // Provision admin account
+        HttpHeaders h = new HttpHeaders();
+        h.setBearerAuth("admin-token");
+        restTemplate.exchange("http://localhost:" + port + "/api/auth/me",
+                HttpMethod.GET, new HttpEntity<>(h), String.class);
+    }
+
     @Test
     void statusReturns200AfterSync() {
-        // Pre-insert so sync only fetches contest 9000
         Concurso existing = new Concurso();
         existing.setNumero(8999);
         existing.setDataSorteio(LocalDate.of(2024, 5, 31));
@@ -52,7 +68,7 @@ class AdminSyncStatusIT extends AbstractWireMockIntegrationTest {
         sincronizacaoService.sincronizar(OrigemSync.AGENDADA);
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth("test-admin-token");
+        headers.setBearerAuth("admin-token");
 
         var response = restTemplate.exchange(
                 "http://localhost:" + port + "/api/admin/sync/status",

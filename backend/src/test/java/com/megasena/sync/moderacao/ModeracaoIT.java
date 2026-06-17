@@ -1,9 +1,12 @@
 package com.megasena.sync.moderacao;
 
+import com.megasena.sync.conferencia.EventoConferenciaRepository;
 import com.megasena.sync.identidade.EstadoConta;
 import com.megasena.sync.identidade.EventoIdentidadeRepository;
 import com.megasena.sync.identidade.MetodoLogin;
 import com.megasena.sync.identidade.UsuarioRepository;
+import com.megasena.sync.jogo.EventoJogoRepository;
+import com.megasena.sync.jogo.JogoRepository;
 import com.megasena.sync.support.AbstractIntegrationTest;
 import com.megasena.sync.support.VerificadorDeIdentidadeFake;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,9 +42,21 @@ class ModeracaoIT extends AbstractIntegrationTest {
     @Autowired
     private EventoIdentidadeRepository eventoIdentidadeRepository;
 
+    @Autowired
+    private EventoConferenciaRepository eventoConferenciaRepository;
+
+    @Autowired
+    private EventoJogoRepository eventoJogoRepository;
+
+    @Autowired
+    private JogoRepository jogoRepository;
+
     @BeforeEach
     void setUp() {
         verificadorFake.limpar();
+        eventoConferenciaRepository.deleteAll();
+        eventoJogoRepository.deleteAll();
+        jogoRepository.deleteAll();
         decisaoRepository.deleteAll();
         eventoIdentidadeRepository.deleteAll();
         usuarioRepository.deleteAll();
