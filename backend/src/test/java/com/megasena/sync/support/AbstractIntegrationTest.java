@@ -25,5 +25,6 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.datasource.password", mysql::getPassword);
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("megasena.admin.token", () -> "test-admin-token");
+        registry.add("megasena.identidade.admins-bootstrap", () -> "admin@bootstrap.com");
     }
 }

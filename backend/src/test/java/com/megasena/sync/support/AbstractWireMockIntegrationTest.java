@@ -44,6 +44,7 @@ public abstract class AbstractWireMockIntegrationTest {
         registry.add("megasena.admin.token", () -> "test-admin-token");
         registry.add("megasena.source.base-url", () -> "http://localhost:" + wireMock.port());
         registry.add("megasena.sync.cron", () -> "-");
+        registry.add("megasena.identidade.admins-bootstrap", () -> "admin@bootstrap.com");
         registry.add("resilience4j.retry.instances.caixaApi.max-attempts", () -> "1");
         registry.add("resilience4j.retry.instances.caixaApi.wait-duration", () -> "100ms");
     }
@@ -53,6 +54,13 @@ public abstract class AbstractWireMockIntegrationTest {
         wireMock.resetAll();
         WireMock.configureFor("localhost", wireMock.port());
         jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 0");
+        jdbcTemplate.execute("TRUNCATE TABLE evento_conferencia");
+        jdbcTemplate.execute("TRUNCATE TABLE evento_jogo");
+        jdbcTemplate.execute("TRUNCATE TABLE jogo_dezena");
+        jdbcTemplate.execute("TRUNCATE TABLE jogo");
+        jdbcTemplate.execute("TRUNCATE TABLE decisao_moderacao");
+        jdbcTemplate.execute("TRUNCATE TABLE evento_identidade");
+        jdbcTemplate.execute("TRUNCATE TABLE usuario");
         jdbcTemplate.execute("TRUNCATE TABLE concurso_dezena");
         jdbcTemplate.execute("TRUNCATE TABLE sync_run");
         jdbcTemplate.execute("TRUNCATE TABLE concurso");

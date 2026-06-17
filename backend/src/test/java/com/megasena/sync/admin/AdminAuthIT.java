@@ -1,6 +1,9 @@
 package com.megasena.sync.admin;
 
+import com.megasena.sync.identidade.MetodoLogin;
 import com.megasena.sync.support.AbstractWireMockIntegrationTest;
+import com.megasena.sync.support.VerificadorDeIdentidadeFake;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -8,12 +11,25 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class AdminAuthIT extends AbstractWireMockIntegrationTest {
 
     @Autowired
     private TestRestTemplate restTemplate;
+
+    @Autowired
+    private VerificadorDeIdentidadeFake verificadorFake;
+
+    @BeforeEach
+    void setUpAuth() {
+        verificadorFake.limpar();
+    }
 
     @Test
     void statusEndpointRequiresAuth() {
@@ -34,12 +50,14 @@ class AdminAuthIT extends AbstractWireMockIntegrationTest {
     }
 
     @Test
-    void runEndpointRequiresAuth() {
-        HttpHeaders headers = new HttpHeaders();
-        var response = restTemplate.exchange(
-                "http://localhost:" + port + "/api/admin/sync/run",
-                HttpMethod.POST, new HttpEntity<>("", headers), String.class);
-        assertEquals(401, response.getStatusCode().value());
+    void runEndpointRequiresAuth() throws Exception {
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/api/admin/sync/run"))
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, response.statusCode());
     }
 
     @Test
