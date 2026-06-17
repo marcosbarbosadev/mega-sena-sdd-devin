@@ -6,6 +6,7 @@ import localePt from '@angular/common/locales/pt';
 
 import { routes } from './app.routes';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
+import { mockApiInterceptor } from './core/mock/mock-api.interceptor';
 
 registerLocaleData(localePt, 'pt-BR');
 
@@ -13,7 +14,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
-    provideHttpClient(withInterceptors([authInterceptor])),
+    provideHttpClient(withInterceptors([mockApiInterceptor, authInterceptor])),
     { provide: LOCALE_ID, useValue: 'pt-BR' }
   ]
 };

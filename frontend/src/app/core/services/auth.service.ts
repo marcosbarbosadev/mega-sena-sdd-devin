@@ -1,27 +1,12 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, Injector, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { initializeApp, FirebaseApp } from 'firebase/app';
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  createUserWithEmailAndPassword,
-  GoogleAuthProvider,
-  signOut,
-  onAuthStateChanged,
-  Auth,
-  User
-} from 'firebase/auth';
 import { environment } from '../../../environments/environment';
 import { ContaResponse } from '../models';
+import { MockDataService } from '../mock/mock-data.service';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private app: FirebaseApp;
-  private auth: Auth;
-  private googleProvider = new GoogleAuthProvider();
-
   private readonly _user = signal<ContaResponse | null>(null);
   private readonly _loading = signal(true);
   private readonly _token = signal<string | null>(null);
@@ -32,14 +17,43 @@ export class AuthService {
   readonly isAdmin = computed(() => this._user()?.papel === 'ADMINISTRADOR');
   readonly accountState = computed(() => this._user()?.estado ?? null);
 
+  private firebaseApp: import('firebase/app').FirebaseApp | null = null;
+  private firebaseAuth: import('firebase/auth').Auth | null = null;
+
+  private mockData = environment.useMockAuth ? inject(MockDataService) : null;
+
   constructor(
     private http: HttpClient,
     private router: Router
   ) {
-    this.app = initializeApp(environment.firebase);
-    this.auth = getAuth(this.app);
+    if (environment.useMockAuth) {
+      this.initMock();
+    } else {
+      this.initFirebase();
+    }
+  }
 
-    onAuthStateChanged(this.auth, async (firebaseUser) => {
+  private initMock(): void {
+    const savedEmail = localStorage.getItem('mock_user_email');
+    if (savedEmail) {
+      const profile = this.mockData!.getProfile(savedEmail);
+      if (profile) {
+        this.mockData!.setCurrentUser(savedEmail);
+        this._token.set('mock-token-' + savedEmail);
+        this._user.set(profile);
+      }
+    }
+    this._loading.set(false);
+  }
+
+  private async initFirebase(): Promise<void> {
+    const { initializeApp } = await import('firebase/app');
+    const { getAuth, onAuthStateChanged } = await import('firebase/auth');
+
+    this.firebaseApp = initializeApp(environment.firebase);
+    this.firebaseAuth = getAuth(this.firebaseApp);
+
+    onAuthStateChanged(this.firebaseAuth, async (firebaseUser) => {
       if (firebaseUser) {
         const token = await firebaseUser.getIdToken();
         this._token.set(token);
@@ -57,7 +71,11 @@ export class AuthService {
   }
 
   async loginWithEmail(email: string, password: string): Promise<void> {
-    const credential = await signInWithEmailAndPassword(this.auth, email, password);
+    if (environment.useMockAuth) {
+      return this.mockLogin(email, password);
+    }
+    const { signInWithEmailAndPassword } = await import('firebase/auth');
+    const credential = await signInWithEmailAndPassword(this.firebaseAuth!, email, password);
     const token = await credential.user.getIdToken();
     this._token.set(token);
     localStorage.setItem('auth_token', token);
@@ -65,7 +83,11 @@ export class AuthService {
   }
 
   async registerWithEmail(email: string, password: string): Promise<void> {
-    const credential = await createUserWithEmailAndPassword(this.auth, email, password);
+    if (environment.useMockAuth) {
+      return this.mockRegister(email, password);
+    }
+    const { createUserWithEmailAndPassword } = await import('firebase/auth');
+    const credential = await createUserWithEmailAndPassword(this.firebaseAuth!, email, password);
     const token = await credential.user.getIdToken();
     this._token.set(token);
     localStorage.setItem('auth_token', token);
@@ -73,7 +95,11 @@ export class AuthService {
   }
 
   async loginWithGoogle(): Promise<void> {
-    const credential = await signInWithPopup(this.auth, this.googleProvider);
+    if (environment.useMockAuth) {
+      throw { code: 'auth/operation-not-supported-in-this-environment' };
+    }
+    const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
+    const credential = await signInWithPopup(this.firebaseAuth!, new GoogleAuthProvider());
     const token = await credential.user.getIdToken();
     this._token.set(token);
     localStorage.setItem('auth_token', token);
@@ -81,23 +107,54 @@ export class AuthService {
   }
 
   async logout(): Promise<void> {
+    if (environment.useMockAuth) {
+      this.mockData!.setCurrentUser(null);
+      localStorage.removeItem('mock_user_email');
+      this.clearState();
+      this.router.navigate(['/login']);
+      return;
+    }
     try {
       await this.http.post(`${environment.apiUrl}/auth/logout`, {}).toPromise();
     } catch {
       // Ignore backend errors during logout
     }
-    await signOut(this.auth);
+    const { signOut } = await import('firebase/auth');
+    await signOut(this.firebaseAuth!);
     this.clearState();
     this.router.navigate(['/login']);
   }
 
   async refreshToken(): Promise<void> {
-    const user = this.auth.currentUser;
+    if (environment.useMockAuth) return;
+    const user = this.firebaseAuth?.currentUser;
     if (user) {
       const token = await user.getIdToken(true);
       this._token.set(token);
       localStorage.setItem('auth_token', token);
     }
+  }
+
+  private mockLogin(email: string, password: string): void {
+    const profile = this.mockData!.login(email, password);
+    if (!profile) {
+      throw { code: 'auth/invalid-credential' };
+    }
+    this._token.set('mock-token-' + email);
+    this._user.set(profile);
+    this.mockData!.setCurrentUser(email);
+    localStorage.setItem('mock_user_email', email);
+  }
+
+  private mockRegister(email: string, password: string): void {
+    const profile = this.mockData!.register(email, password);
+    if (!profile) {
+      throw { code: 'auth/email-already-in-use' };
+    }
+    this._token.set('mock-token-' + email);
+    this._user.set(profile);
+    this.mockData!.setCurrentUser(email);
+    localStorage.setItem('mock_user_email', email);
   }
 
   private async loadProfile(): Promise<void> {
@@ -109,7 +166,7 @@ export class AuthService {
         this._user.set(profile);
       }
     } catch {
-      // Profile load failed - user may not exist in backend yet
+      // Profile load failed
     }
   }
 
