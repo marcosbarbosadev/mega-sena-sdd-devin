@@ -1,5 +1,7 @@
 package com.megasena.sync.admin;
 
+import com.megasena.sync.concurso.Concurso;
+import com.megasena.sync.concurso.ConcursoRepository;
 import com.megasena.sync.sincronizacao.OrigemSync;
 import com.megasena.sync.sincronizacao.SincronizacaoService;
 import com.megasena.sync.support.AbstractWireMockIntegrationTest;
@@ -9,6 +11,9 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
@@ -22,10 +27,22 @@ class AdminSyncStatusIT extends AbstractWireMockIntegrationTest {
     private SincronizacaoService sincronizacaoService;
 
     @Autowired
+    private ConcursoRepository concursoRepository;
+
+    @Autowired
     private TestRestTemplate restTemplate;
 
     @Test
     void statusReturns200AfterSync() {
+        // Pre-insert so sync only fetches contest 9000
+        Concurso existing = new Concurso();
+        existing.setNumero(8999);
+        existing.setDataSorteio(LocalDate.of(2024, 5, 31));
+        existing.setValorPremio(BigDecimal.valueOf(5000000));
+        existing.addDezena(1); existing.addDezena(2); existing.addDezena(3);
+        existing.addDezena(4); existing.addDezena(5); existing.addDezena(6);
+        concursoRepository.save(existing);
+
         wireMock.stubFor(get(urlEqualTo("/"))
                 .willReturn(aResponse()
                         .withHeader("Content-Type", "application/json")
