@@ -3,32 +3,34 @@ package com.megasena.sync.support;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers
 public abstract class AbstractWireMockIntegrationTest {
 
-    protected static WireMockServer wireMock;
+    protected static final WireMockServer wireMock;
+    private static final MySQLContainer<?> mysql;
 
     @LocalServerPort
     protected int port;
 
-    @Container
-    static final MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0")
-            .withDatabaseName("megasena")
-            .withUsername("test")
-            .withPassword("test");
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     static {
+        mysql = new MySQLContainer<>("mysql:8.0")
+                .withDatabaseName("megasena")
+                .withUsername("test")
+                .withPassword("test");
+        mysql.start();
+
         wireMock = new WireMockServer(WireMockConfiguration.wireMockConfig().dynamicPort());
         wireMock.start();
     }
@@ -47,14 +49,14 @@ public abstract class AbstractWireMockIntegrationTest {
     }
 
     @BeforeEach
-    void resetWireMock() {
+    void resetState() {
         wireMock.resetAll();
         WireMock.configureFor("localhost", wireMock.port());
-    }
-
-    @AfterEach
-    void verifyWireMock() {
-        wireMock.resetAll();
+        jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 0");
+        jdbcTemplate.execute("TRUNCATE TABLE concurso_dezena");
+        jdbcTemplate.execute("TRUNCATE TABLE sync_run");
+        jdbcTemplate.execute("TRUNCATE TABLE concurso");
+        jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 1");
     }
 
     protected static String concursoPayload(int numero, String data, String[] dezenas, double premio) {
