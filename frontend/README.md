@@ -1,59 +1,148 @@
-# MegasenaFrontend
+# Mega Sena Manager — Frontend
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 19.2.27.
+Frontend Angular 19 para o sistema de gerenciamento de jogos da Mega Sena.
 
-## Development server
+## Pré-requisitos
 
-To start a local development server, run:
+- Node.js 18+ (LTS)
+- npm 9+
 
-```bash
-ng serve
-```
-
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## Instalação
 
 ```bash
-ng generate component component-name
+cd frontend
+npm install
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+## Modo Mock (Desenvolvimento Local sem Firebase)
+
+O modo mock permite acessar o sistema localmente **sem backend e sem provedor de identidade (Firebase)**. Todas as APIs são simuladas no navegador com dados em memória.
+
+### Como ativar
+
+O modo mock já vem **ativado por padrão** no ambiente de desenvolvimento (`environment.ts`):
+
+```typescript
+// src/environments/environment.ts
+export const environment = {
+  useMockAuth: true,  // ← modo mock ativado
+  ...
+};
+```
+
+Para desativar (e usar Firebase real + backend), altere para `false`.
+
+### Passo a passo
+
+1. **Instale as dependências e inicie o servidor:**
+
+   ```bash
+   cd frontend
+   npm install
+   npx ng serve
+   ```
+
+2. **Acesse no navegador:** `http://localhost:4200`
+
+3. **Login como Administrador:**
+   - E-mail: `admin@local.com`
+   - Senha: `123456`
+   - Você será redirecionado para o painel administrativo
+
+4. **Cadastrar um novo usuário (ficará pendente):**
+   - Na tela de login, clique na aba **"Cadastrar"**
+   - Preencha com qualquer e-mail (ex: `usuario@teste.com`) e uma senha qualquer
+   - O usuário será criado com estado **PENDENTE** e você verá a tela de "Conta Pendente"
+
+5. **Aprovar o usuário pelo admin:**
+   - Faça logout do usuário pendente (botão "Sair" na tela de pendente)
+   - Faça login como admin: `admin@local.com` / `123456`
+   - Vá em **"Moderação"** no menu
+   - Você verá o usuário pendente na lista
+   - Clique em **"Aprovar"** (ou **"Reprovar"** informando um motivo)
+
+6. **Acessar como o usuário aprovado:**
+   - Faça logout do admin
+   - Faça login com o e-mail/senha do usuário que você cadastrou
+   - Agora ele terá acesso ao dashboard, jogos, conferência e concursos
+
+### Funcionalidades disponíveis no modo mock
+
+| Funcionalidade | Descrição |
+|---|---|
+| Login/Cadastro | E-mail e senha (sem Google no mock) |
+| Dashboard | Estatísticas de jogos cadastrados |
+| Cadastrar Jogo | Manual (selecionar dezenas) ou Automático |
+| Listar Jogos | Ver, editar e excluir jogos |
+| Conferência | Resultados dos jogos contra concurso mockado (2750) |
+| Concursos | Visualizar concurso mais recente e buscar por número |
+| Admin - Moderação | Aprovar/reprovar contas pendentes |
+| Admin - Sincronização | Ver status e disparar sync (simulado) |
+
+### Dados mockados
+
+- **Concurso 2750:** dezenas [5, 12, 23, 34, 45, 56], prêmio R$ 35.000.000
+- **Concurso 2749:** dezenas [3, 17, 29, 38, 44, 52], prêmio R$ 22.000.000
+- Jogos criados ficam apenas em memória (são perdidos ao recarregar a página)
+- Sessão do usuário logado persiste via `localStorage`
+
+## Servidor de Desenvolvimento (com Backend)
+
+Para usar com o backend real (Spring Boot + Firebase):
+
+1. Configure o Firebase em `src/environments/environment.ts`:
+   ```typescript
+   export const environment = {
+     useMockAuth: false,  // ← desativar mock
+     apiUrl: 'http://localhost:8080/api',
+     firebase: {
+       apiKey: 'SUA_API_KEY',
+       authDomain: 'SEU_PROJETO.firebaseapp.com',
+       projectId: 'SEU_PROJECT_ID',
+       ...
+     }
+   };
+   ```
+
+2. Inicie o backend na porta 8080
+
+3. Execute:
+   ```bash
+   npx ng serve
+   ```
+
+4. Acesse `http://localhost:4200`
+
+## Build
 
 ```bash
-ng generate --help
+npx ng build
 ```
 
-## Building
+Os artefatos ficam em `dist/megasena-frontend/`.
 
-To build the project run:
+## Testes
 
 ```bash
-ng build
+npx ng test
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+## Estrutura do Projeto
 
-## Running unit tests
-
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
-
-```bash
-ng test
 ```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
+src/app/
+├── core/
+│   ├── guards/          # authGuard, adminGuard, unauthGuard
+│   ├── interceptors/    # authInterceptor (JWT)
+│   ├── mock/            # MockDataService, mockApiInterceptor
+│   ├── models/          # Interfaces (DTOs)
+│   └── services/        # AuthService, ApiService, NotificationService
+├── features/
+│   ├── admin/           # Dashboard, moderação, sincronização
+│   ├── auth/            # Login, perfil, estado pendente/reprovado
+│   ├── concursos/       # Último concurso, busca
+│   ├── conference/      # Conferência de jogos
+│   └── games/           # Dashboard, lista, criar, editar
+├── layout/              # Header, footer
+└── shared/              # Loading, error-message, notifications
 ```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
