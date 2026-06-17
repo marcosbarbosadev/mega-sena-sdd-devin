@@ -1,0 +1,217 @@
+openapi: 3.0.3
+info:
+  title: Mega Sena — API de Moderação de Contas (feature 003)
+  version: 1.0.0
+  description: >
+    Endpoints administrativos para fechar a porta de aprovação aberta pela feature
+    002. Todas as rotas exigem uma identidade autenticada com papel ADMINISTRADOR
+    (`ROLE_ADMINISTRADOR`); a identidade e o papel são derivados do ID token
+    verificado no servidor (porta `VerificadorDeIdentidade` da 002), nunca de um ID
+    enviado pelo cliente (Princípios I e VII). As transições ocorrem somente a
+    partir do estado PENDENTE; ATIVO e REPROVADO são terminais (Princípio IX). Cada
+    decisão é auditada em `decisao_moderacao` (Princípio V).
+
+servers:
+  - url: /api
+
+components:
+  securitySchemes:
+    providerIdToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: ID token (JWT OIDC) emitido pelo Google Identity Platform. A conta deve ter papel ADMINISTRADOR e estado ATIVO.
+
+  schemas:
+    ContaPendente:
+      type: object
+      required: [id, email, metodoLogin, criadoEm]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador local da conta alvo.
+        email:
+          type: string
+          format: email
+        metodoLogin:
+          type: string
+          enum: [SENHA, GOOGLE]
+        criadoEm:
+          type: string
+          format: date-time
+          description: Momento do auto-cadastro (data do pedido).
+
+    ReprovacaoRequest:
+      type: object
+      required: [motivo]
+      properties:
+        motivo:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Justificativa obrigatória da reprovação (FR-004a). Registrada na auditoria.
+
+    Erro:
+      type: object
+      required: [status, codigo, mensagem]
+      properties:
+        status:
+          type: integer
+        codigo:
+          type: string
+          description: Código curto e estável (ex.- TRANSICAO_INVALIDA, MOTIVO_OBRIGATORIO, ACESSO_NEGADO, NAO_AUTENTICADO).
+        mensagem:
+          type: string
+
+  responses:
+    NaoAutenticado:
+      description: Token ausente, malformado, expirado ou inválido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            status: 401
+            codigo: NAO_AUTENTICADO
+            mensagem: Autenticação necessária.
+    AcessoNegado:
+      description: Identidade autenticada sem papel ADMINISTRADOR (FR-002).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            status: 403
+            codigo: ACESSO_NEGADO
+            mensagem: Acesso restrito a administradores.
+
+security:
+  - providerIdToken: []
+
+paths:
+  /admin/contas/pendentes:
+    get:
+      summary: Lista as contas em estado PENDENTE (fila de aprovação)
+      description: >
+        Retorna as contas aguardando decisão, com o mínimo necessário para o admin
+        decidir (FR-001). Apenas pendentes — histórico de já-decididas está fora do
+        escopo desta feature.
+      security:
+        - providerIdToken: []
+      responses:
+        '200':
+          description: Fila de pendentes (pode ser vazia).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContaPendente'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/AcessoNegado'
+
+  /admin/contas/{id}/aprovar:
+    post:
+      summary: Aprova uma conta pendente (PENDENTE → ATIVO)
+      description: >
+        Transiciona a conta para ATIVO se — e somente se — ela estiver PENDENTE
+        (UPDATE condicionado). Concede acesso aos recursos de usuário (FR-006) e
+        registra a decisão APROVADO na auditoria. Sem corpo (aprovação não exige
+        motivo).
+      security:
+        - providerIdToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Conta aprovada (agora ATIVO). Decisão auditada.
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/AcessoNegado'
+        '404':
+          description: Conta inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                status: 404
+                codigo: CONTA_NAO_ENCONTRADA
+                mensagem: Conta não encontrada.
+        '409':
+          description: >
+            O estado atual não permite a transição — a conta não está PENDENTE (já
+            ativa/reprovada ou decidida concorrentemente). FR-005/FR-008.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                status: 409
+                codigo: TRANSICAO_INVALIDA
+                mensagem: A conta não está pendente.
+
+  /admin/contas/{id}/reprovar:
+    post:
+      summary: Reprova uma conta pendente (PENDENTE → REPROVADO), com motivo obrigatório
+      description: >
+        Transiciona a conta para REPROVADO se — e somente se — ela estiver PENDENTE
+        (UPDATE condicionado). Exige um motivo (FR-004a), registrado na auditoria
+        junto da decisão REPROVADO. A conta permanece sem acesso.
+      security:
+        - providerIdToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReprovacaoRequest'
+      responses:
+        '204':
+          description: Conta reprovada (agora REPROVADO). Decisão e motivo auditados.
+        '400':
+          description: Motivo ausente ou vazio (FR-004a).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                status: 400
+                codigo: MOTIVO_OBRIGATORIO
+                mensagem: Informe o motivo da reprovação.
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/AcessoNegado'
+        '404':
+          description: Conta inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+        '409':
+          description: O estado atual não permite a transição (não está PENDENTE). FR-005/FR-008.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                status: 409
+                codigo: TRANSICAO_INVALIDA
+                mensagem: A conta não está pendente.

@@ -1,0 +1,232 @@
+openapi: 3.0.3
+info:
+  title: Mega Sena — API de Jogos (feature 004)
+  version: 1.0.0
+  description: >
+    Endpoints para o usuário gerenciar suas apostas. Todas as rotas exigem uma
+    identidade autenticada com conta ATIVA (papel ROLE_USUARIO — gate herdado da
+    feature 002); contas PENDENTE/REPROVADO recebem 403. O dono de cada jogo é
+    derivado do ID token verificado no servidor, nunca de um id enviado pelo cliente
+    (Princípio I). Cada jogo tem 6 a 9 dezenas distintas (1–60), informadas pelo
+    usuário ou geradas pelo sistema (nunca parcial), e é vinculado no cadastro ao
+    próximo concurso em aberto (número fixo). Editar/excluir só é permitido enquanto
+    o concurso vinculado não foi sorteado.
+
+servers:
+  - url: /api
+
+components:
+  securitySchemes:
+    providerIdToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: ID token (JWT OIDC) emitido pelo Google Identity Platform; conta deve estar ATIVA.
+
+  schemas:
+    CadastroJogoRequest:
+      type: object
+      description: >
+        Exatamente UM modo: informar todas as `dezenas` OU informar a `quantidade`
+        para geração. Ambos, nenhum ou dezenas parciais são recusados (FR-003).
+      properties:
+        dezenas:
+          type: array
+          description: Cadastro informado — 6 a 9 dezenas distintas entre 1 e 60.
+          items:
+            type: integer
+            minimum: 1
+            maximum: 60
+          minItems: 6
+          maxItems: 9
+          uniqueItems: true
+        quantidade:
+          type: integer
+          description: Cadastro gerado — quantidade de dezenas a sortear (6 a 9).
+          minimum: 6
+          maximum: 9
+      oneOf:
+        - required: [dezenas]
+        - required: [quantidade]
+
+    Jogo:
+      type: object
+      required: [id, concursoNumero, dezenas, editavel]
+      properties:
+        id:
+          type: string
+          format: uuid
+        concursoNumero:
+          type: integer
+          description: Número do concurso vinculado (fixado no cadastro).
+        dezenas:
+          type: array
+          items:
+            type: integer
+          description: Dezenas do jogo (6–9, ordenadas).
+        editavel:
+          type: boolean
+          description: true enquanto o concurso vinculado não foi sorteado.
+        criadoEm:
+          type: string
+          format: date-time
+        atualizadoEm:
+          type: string
+          format: date-time
+
+    Erro:
+      type: object
+      required: [status, codigo, mensagem]
+      properties:
+        status:
+          type: integer
+        codigo:
+          type: string
+          description: Código curto e estável (ex.- VALIDACAO, CADASTRO_PARCIAL, SEM_CONCURSO_ABERTO, JOGO_BLOQUEADO, NAO_ENCONTRADO).
+        mensagem:
+          type: string
+
+  responses:
+    NaoAutenticado:
+      description: Token ausente/ inválido.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+          example: { status: 401, codigo: NAO_AUTENTICADO, mensagem: Autenticação necessária. }
+    SemAcesso:
+      description: Conta autenticada porém sem acesso (PENDENTE/REPROVADO).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+          example: { status: 403, codigo: ACESSO_NEGADO, mensagem: Sua conta não tem acesso a este recurso. }
+
+security:
+  - providerIdToken: []
+
+paths:
+  /jogos:
+    post:
+      summary: Cadastra um jogo (informado ou gerado)
+      description: >
+        Cria um jogo com as `dezenas` informadas OU com `quantidade` para geração.
+        Valida 6–9 dezenas distintas 1–60 (FR-004) e a regra "tudo ou geração"
+        (FR-003), e vincula ao próximo concurso em aberto (FR-005).
+      security: [ { providerIdToken: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CadastroJogoRequest' }
+      responses:
+        '201':
+          description: Jogo criado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Jogo' }
+        '400':
+          description: Aposta inválida (contagem/intervalo/repetição) ou cadastro parcial.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+              examples:
+                validacao: { value: { status: 400, codigo: VALIDACAO, mensagem: Dezenas inválidas. } }
+                parcial: { value: { status: 400, codigo: CADASTRO_PARCIAL, mensagem: Informe todas as dezenas ou apenas a quantidade. } }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemAcesso' }
+        '409':
+          description: Não há concurso em aberto determinável (nenhum concurso sincronizado).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+              example: { status: 409, codigo: SEM_CONCURSO_ABERTO, mensagem: Nenhum concurso disponível para apostar no momento. }
+    get:
+      summary: Lista os jogos do próprio usuário
+      security: [ { providerIdToken: [] } ]
+      responses:
+        '200':
+          description: Jogos do usuário (pode ser vazio).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Jogo' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemAcesso' }
+
+  /jogos/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Obtém um jogo do próprio usuário
+      security: [ { providerIdToken: [] } ]
+      responses:
+        '200':
+          description: Jogo encontrado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Jogo' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemAcesso' }
+        '404':
+          description: Jogo inexistente ou de outro usuário (isolamento — não revela posse alheia).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+              example: { status: 404, codigo: NAO_ENCONTRADO, mensagem: Jogo não encontrado. }
+    put:
+      summary: Edita as dezenas/quantidade de um jogo (antes do sorteio)
+      description: >
+        Substitui as dezenas (e a quantidade, 6–9) mantendo o mesmo concurso
+        vinculado. Bloqueado se o concurso já foi sorteado (FR-008).
+      security: [ { providerIdToken: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CadastroJogoRequest' }
+      responses:
+        '200':
+          description: Jogo atualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Jogo' }
+        '400':
+          description: Aposta inválida ou cadastro parcial.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemAcesso' }
+        '404':
+          description: Jogo inexistente ou de outro usuário.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+        '409':
+          description: Concurso vinculado já foi sorteado — jogo somente leitura.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+              example: { status: 409, codigo: JOGO_BLOQUEADO, mensagem: O concurso já foi sorteado; o jogo não pode mais ser alterado. }
+    delete:
+      summary: Exclui um jogo (antes do sorteio)
+      security: [ { providerIdToken: [] } ]
+      responses:
+        '204':
+          description: Jogo excluído.
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemAcesso' }
+        '404':
+          description: Jogo inexistente ou de outro usuário.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+        '409':
+          description: Concurso vinculado já foi sorteado — exclusão bloqueada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+              example: { status: 409, codigo: JOGO_BLOQUEADO, mensagem: O concurso já foi sorteado; o jogo não pode mais ser excluído. }

@@ -1,0 +1,50 @@
+name: Backend Unit Tests
+
+# Roda os testes de UNIDADE do backend (Surefire — arquivos *Test.java).
+# Os testes de integração (*IT.java, via Failsafe + Testcontainers) rodam na fase
+# `verify` e NÃO são executados aqui — por isso este job não precisa de Docker/MySQL.
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-unit-tests.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-unit-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: Maven unit tests (Surefire)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Run unit tests
+        # `test` executa apenas o Surefire (*Test.java); os *IT.java ficam para `verify`.
+        run: ./mvnw -B -ntp test
+
+      - name: Upload Surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          # Relativo à raiz do repo (GITHUB_WORKSPACE); upload-artifact não usa o
+          # working-directory dos steps `run`.
+          path: backend/target/surefire-reports/
+          if-no-files-found: ignore

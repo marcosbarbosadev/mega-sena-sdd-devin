@@ -1,0 +1,163 @@
+openapi: 3.0.3
+info:
+  title: Mega Sena — API de Identidade (feature 002)
+  version: 1.0.0
+  description: >
+    Endpoints próprios da aplicação para identidade. A autenticação (login e-mail+senha /
+    Google) é feita no provedor gerenciado (Google Identity Platform); o cliente envia o
+    ID token emitido pelo provedor no header `Authorization: Bearer <idToken>`. O backend
+    valida o token no servidor a cada requisição (assinatura, emissor, audiência,
+    expiração) e deriva a identidade — nunca de um ID enviado pelo cliente (Princípios I e
+    VII). Nenhuma senha trafega por estes endpoints nem é armazenada pela aplicação.
+
+servers:
+  - url: /api
+
+components:
+  securitySchemes:
+    providerIdToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: ID token (JWT OIDC) emitido pelo Google Identity Platform.
+
+  schemas:
+    Conta:
+      type: object
+      required: [id, email, papel, estado]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador local da conta (chave de isolamento). Derivado no servidor.
+        email:
+          type: string
+          format: email
+        papel:
+          type: string
+          enum: [USUARIO, ADMINISTRADOR]
+        estado:
+          type: string
+          enum: [PENDENTE, ATIVO, REPROVADO]
+        metodoLogin:
+          type: string
+          enum: [SENHA, GOOGLE]
+        ultimoAcessoEm:
+          type: string
+          format: date-time
+          nullable: true
+
+    Erro:
+      type: object
+      required: [status, codigo, mensagem]
+      properties:
+        status:
+          type: integer
+        codigo:
+          type: string
+          description: Código curto e estável (ex.- CONTA_PENDENTE, EMAIL_NAO_VERIFICADO, NAO_AUTENTICADO).
+        mensagem:
+          type: string
+          description: Mensagem amigável; nunca revela se um e-mail existe (SC-006).
+
+  responses:
+    NaoAutenticado:
+      description: Token ausente, malformado, expirado ou inválido. Genérico (SC-006).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            status: 401
+            codigo: NAO_AUTENTICADO
+            mensagem: Autenticação necessária.
+
+security:
+  - providerIdToken: []
+
+paths:
+  /auth/me:
+    get:
+      summary: Retorna a conta da identidade autenticada (provisiona em PENDENTE na 1ª vez)
+      description: >
+        Valida o ID token e resolve a conta local por `provider_uid`. Se não existir,
+        provisiona uma nova conta em estado **PENDENTE** (auto-cadastro just-in-time,
+        User Story 1) e audita `CADASTRO`. Se a identidade vier do Google com e-mail
+        **não verificado**, recusa sem criar conta (FR-015). Contas PENDENTE/REPROVADO
+        recebem 200 com seu estado (para conhecer a situação), mas **não** ganham acesso a
+        recursos de usuário.
+      security:
+        - providerIdToken: []
+      responses:
+        '200':
+          description: Conta resolvida ou recém-provisionada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conta'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          description: >
+            Identidade verificada, mas inelegível para criar conta — e-mail do Google não
+            verificado (FR-015).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                status: 403
+                codigo: EMAIL_NAO_VERIFICADO
+                mensagem: Verifique seu e-mail no provedor antes de continuar.
+        '503':
+          description: Provedor de identidade indisponível (FR-013), sem criar conta inconsistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+
+  /auth/logout:
+    post:
+      summary: Encerra a sessão (revoga refresh tokens da identidade)
+      description: >
+        Revoga os refresh tokens da identidade no provedor (FR-010) e audita `LOGOUT`. O
+        cliente descarta o token local; acessos subsequentes exigem nova autenticação.
+      security:
+        - providerIdToken: []
+      responses:
+        '204':
+          description: Sessão encerrada.
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+
+  # --- Primeiro recurso de usuário protegido (veículo do gate de estado) ---
+  # O gate definido aqui se aplica também aos recursos de jogos/conferências (features
+  # 004/005): somente conta ATIVO passa; PENDENTE/REPROVADO recebem 403 ACESSO_NEGADO
+  # com o estado (FR-006, Princípio IX).
+  /perfil:
+    get:
+      summary: Perfil do próprio usuário autenticado (exige conta ATIVO)
+      security:
+        - providerIdToken: []
+      responses:
+        '200':
+          description: Acesso concedido (conta ATIVO).
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          description: Conta autenticada porém sem acesso (PENDENTE/REPROVADO).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              examples:
+                pendente:
+                  value:
+                    status: 403
+                    codigo: CONTA_PENDENTE
+                    mensagem: Sua conta aguarda aprovação de um administrador.
+                reprovada:
+                  value:
+                    status: 403
+                    codigo: CONTA_REPROVADA
+                    mensagem: Acesso não autorizado para esta conta.

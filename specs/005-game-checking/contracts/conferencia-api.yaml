@@ -1,0 +1,129 @@
+openapi: 3.0.3
+info:
+  title: Mega Sena — API de Conferência (feature 005)
+  version: 1.0.0
+  description: >
+    Endpoints para o usuário conferir seus jogos contra o resultado oficial do
+    concurso vinculado. Todas as rotas exigem conta ATIVA (papel ROLE_USUARIO — gate
+    da feature 002); PENDENTE/REPROVADO recebem 403. O dono é derivado do ID token
+    verificado no servidor, nunca de um id do cliente (Princípio I). A conferência é
+    computada sob demanda, determinística e idempotente (acertos = interseção com as
+    6 dezenas sorteadas; faixa sena/quina/quadra; premiado = ≥4 acertos), sem valores
+    monetários. Jogos cujo concurso ainda não foi sorteado retornam
+    status AGUARDANDO_SORTEIO. Cada conferência gera, na primeira vez, uma trilha de
+    auditoria única por jogo×concurso (Princípio V).
+
+servers:
+  - url: /api
+
+components:
+  securitySchemes:
+    providerIdToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: ID token (JWT OIDC) do Google Identity Platform; conta deve estar ATIVA.
+
+  schemas:
+    Conferencia:
+      type: object
+      required: [jogoId, concursoNumero, status]
+      properties:
+        jogoId:
+          type: string
+          format: uuid
+        concursoNumero:
+          type: integer
+        status:
+          type: string
+          enum: [CONFERIDO, AGUARDANDO_SORTEIO]
+        acertos:
+          type: integer
+          minimum: 0
+          maximum: 6
+          description: Presente apenas quando status=CONFERIDO.
+        faixa:
+          type: string
+          enum: [SENA, QUINA, QUADRA, NENHUMA]
+          description: Presente apenas quando status=CONFERIDO.
+        premiado:
+          type: boolean
+          description: Presente apenas quando status=CONFERIDO (true se acertos>=4).
+
+    Erro:
+      type: object
+      required: [status, codigo, mensagem]
+      properties:
+        status: { type: integer }
+        codigo: { type: string }
+        mensagem: { type: string }
+
+  responses:
+    NaoAutenticado:
+      description: Token ausente/ inválido.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+          example: { status: 401, codigo: NAO_AUTENTICADO, mensagem: Autenticação necessária. }
+    SemAcesso:
+      description: Conta autenticada sem acesso (PENDENTE/REPROVADO).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+          example: { status: 403, codigo: ACESSO_NEGADO, mensagem: Sua conta não tem acesso a este recurso. }
+
+security:
+  - providerIdToken: []
+
+paths:
+  /jogos/{id}/conferencia:
+    get:
+      summary: Confere um jogo do próprio usuário
+      description: >
+        Computa a conferência do jogo contra o concurso vinculado. Se o concurso já
+        foi sorteado → CONFERIDO com acertos/faixa/premiado e grava (idempotente) a
+        auditoria; senão → AGUARDANDO_SORTEIO. 404 se o jogo não for do usuário.
+      security: [ { providerIdToken: [] } ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Conferência do jogo (conferido ou aguardando).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Conferencia' }
+              examples:
+                conferido:
+                  value: { jogoId: "f3a1...", concursoNumero: 2710, status: CONFERIDO, acertos: 5, faixa: QUINA, premiado: true }
+                aguardando:
+                  value: { jogoId: "f3a1...", concursoNumero: 2750, status: AGUARDANDO_SORTEIO }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemAcesso' }
+        '404':
+          description: Jogo inexistente ou de outro usuário (isolamento).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+              example: { status: 404, codigo: NAO_ENCONTRADO, mensagem: Jogo não encontrado. }
+
+  /conferencias:
+    get:
+      summary: Lista a conferência de todos os jogos do próprio usuário
+      description: >
+        Para cada jogo do usuário, retorna a conferência (CONFERIDO ou
+        AGUARDANDO_SORTEIO). Conferências de jogos já sorteados gravam (idempotente) a
+        auditoria na primeira vez.
+      security: [ { providerIdToken: [] } ]
+      responses:
+        '200':
+          description: Conferências dos jogos do usuário (pode ser vazio).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Conferencia' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemAcesso' }

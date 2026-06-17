@@ -1,0 +1,109 @@
+openapi: 3.0.3
+info:
+  title: Mega Sena Sync API
+  version: 1.0.0
+  description: >
+    Endpoints da feature de sincronização. Leitura de concursos (referência global,
+    somente leitura) e operações administrativas (status e disparo manual), restritas ao
+    perfil admin.
+
+paths:
+  /api/concursos/latest:
+    get:
+      summary: Retorna o concurso mais recente armazenado
+      operationId: getLatestConcurso
+      responses:
+        "200":
+          description: Concurso mais recente
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Concurso" }
+        "404":
+          description: Nenhum concurso sincronizado ainda
+
+  /api/concursos/{numero}:
+    get:
+      summary: Retorna um concurso específico
+      operationId: getConcurso
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Concurso encontrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Concurso" }
+        "404":
+          description: Concurso não encontrado localmente
+
+  /api/admin/sync/status:
+    get:
+      summary: Status da última sincronização (admin)
+      operationId: getSyncStatus
+      security: [ { adminAuth: [] } ]
+      responses:
+        "200":
+          description: Resumo da última execução de sincronização
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncRun" }
+        "401":
+          description: Não autenticado como admin
+        "404":
+          description: Nenhuma sincronização registrada ainda
+
+  /api/admin/sync/run:
+    post:
+      summary: Dispara uma sincronização manual de recuperação (admin)
+      operationId: triggerManualSync
+      security: [ { adminAuth: [] } ]
+      responses:
+        "202":
+          description: Sincronização aceita e iniciada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncRun" }
+        "401":
+          description: Não autenticado como admin
+        "409":
+          description: Já existe uma sincronização em execução (lock)
+
+components:
+  securitySchemes:
+    adminAuth:
+      type: http
+      scheme: bearer
+      description: Credencial/segredo de serviço do perfil admin (desacoplado do login de usuários finais)
+
+  schemas:
+    Concurso:
+      type: object
+      required: [numero, dataSorteio, dezenas, valorPremio]
+      properties:
+        numero: { type: integer, example: 2700 }
+        dataSorteio: { type: string, format: date, example: "2024-05-29" }
+        dezenas:
+          type: array
+          minItems: 6
+          maxItems: 6
+          items: { type: integer, minimum: 1, maximum: 60 }
+          example: [4, 17, 23, 38, 51, 60]
+        valorPremio: { type: number, format: double, example: 52000000.00 }
+
+    SyncRun:
+      type: object
+      required: [id, origem, status, iniciadoEm]
+      properties:
+        id: { type: integer, example: 42 }
+        origem: { type: string, enum: [AGENDADA, MANUAL] }
+        status: { type: string, enum: [EM_EXECUCAO, SUCESSO, FALHA, PARCIAL] }
+        iniciadoEm: { type: string, format: date-time }
+        finalizadoEm: { type: string, format: date-time, nullable: true }
+        concursoInicial: { type: integer, nullable: true }
+        concursoFinal: { type: integer, nullable: true }
+        concursosImportados: { type: integer, example: 1 }
+        tentativas: { type: integer, example: 1 }
+        mensagemErro: { type: string, nullable: true }
