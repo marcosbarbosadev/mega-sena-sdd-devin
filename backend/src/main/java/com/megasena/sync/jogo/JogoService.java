@@ -2,6 +2,7 @@ package com.megasena.sync.jogo;
 
 import com.megasena.sync.concurso.Concurso;
 import com.megasena.sync.concurso.ConcursoRepository;
+import com.megasena.sync.conferencia.EventoConferenciaRepository;
 import com.megasena.sync.config.GlobalExceptionHandler.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,15 +18,18 @@ public class JogoService {
     private final EventoJogoRepository eventoJogoRepository;
     private final ConcursoRepository concursoRepository;
     private final FonteAleatoriedade fonteAleatoriedade;
+    private final EventoConferenciaRepository eventoConferenciaRepository;
 
     public JogoService(JogoRepository jogoRepository,
                        EventoJogoRepository eventoJogoRepository,
                        ConcursoRepository concursoRepository,
-                       FonteAleatoriedade fonteAleatoriedade) {
+                       FonteAleatoriedade fonteAleatoriedade,
+                       EventoConferenciaRepository eventoConferenciaRepository) {
         this.jogoRepository = jogoRepository;
         this.eventoJogoRepository = eventoJogoRepository;
         this.concursoRepository = concursoRepository;
         this.fonteAleatoriedade = fonteAleatoriedade;
+        this.eventoConferenciaRepository = eventoConferenciaRepository;
     }
 
     @Transactional
@@ -119,6 +123,7 @@ public class JogoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Jogo não encontrado"));
 
         verificarEditavel(jogo);
+        eventoConferenciaRepository.deleteByJogoId(jogo.getId());
         eventoJogoRepository.deleteByJogoId(jogo.getId());
         jogoRepository.delete(jogo);
     }
