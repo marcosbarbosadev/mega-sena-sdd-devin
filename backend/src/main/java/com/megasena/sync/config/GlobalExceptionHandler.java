@@ -2,6 +2,8 @@ package com.megasena.sync.config;
 
 import com.megasena.sync.identidade.EmailNaoVerificadoException;
 import com.megasena.sync.identidade.provedor.ProvedorIndisponivelException;
+import com.megasena.sync.jogo.JogoNaoEditavelException;
+import com.megasena.sync.jogo.JogoValidacaoException;
 import com.megasena.sync.moderacao.ContaNaoEncontradaException;
 import com.megasena.sync.moderacao.TransicaoInvalidaException;
 import org.slf4j.Logger;
@@ -53,6 +55,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleTransicaoInvalida(TransicaoInvalidaException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(errorBody(409, "TRANSICAO_INVALIDA", ex.getMessage()));
+    }
+
+    @ExceptionHandler(JogoValidacaoException.class)
+    public ResponseEntity<Map<String, Object>> handleJogoValidacao(JogoValidacaoException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(errorBody(400, "VALIDACAO_JOGO", ex.getMessage()));
+    }
+
+    @ExceptionHandler(JogoNaoEditavelException.class)
+    public ResponseEntity<Map<String, Object>> handleJogoNaoEditavel(JogoNaoEditavelException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(errorBody(409, "JOGO_NAO_EDITAVEL", ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
