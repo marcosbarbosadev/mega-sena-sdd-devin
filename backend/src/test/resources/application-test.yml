@@ -1,0 +1,36 @@
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+megasena:
+  source:
+    base-url: http://localhost:${wiremock.server.port:/megasena}
+    connect-timeout: 2000
+    read-timeout: 3000
+    user-agent: "MegaSenaSync-Test/1.0"
+  sync:
+    cron: "-"
+    retry-max-attempts: 2
+    retry-wait-duration: 100ms
+  admin:
+    token: test-admin-token
+
+resilience4j:
+  retry:
+    instances:
+      caixaApi:
+        max-attempts: 2
+        wait-duration: 100ms
+        enable-exponential-backoff: false
+        retry-exceptions:
+          - java.io.IOException
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
