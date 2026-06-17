@@ -9,7 +9,7 @@ CREATE TABLE concurso (
 CREATE TABLE concurso_dezena (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     concurso_numero INT NOT NULL,
-    dezena TINYINT NOT NULL,
+    dezena INT NOT NULL,
     CONSTRAINT fk_concurso_dezena_concurso
         FOREIGN KEY (concurso_numero) REFERENCES concurso(numero)
         ON DELETE CASCADE,
